@@ -1,0 +1,10 @@
+{
+    "include": [
+        "/Users/janik/Documents/Programming/go/src/github.com/janikgar"   
+    ],
+    "exclude": [
+        "/Users/janik/Documents/Programming/go/src",
+        "/Users/janik/Documents/Programming/go/pkg/dep"
+    ],
+    "searchDir": "/Users/janik/Documents/Programming/go/src/github.com"
+}
