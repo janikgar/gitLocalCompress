@@ -6,10 +6,11 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/karrick/godirwalk"
 
 	git "gopkg.in/src-d/go-git.v4"
 )
@@ -80,25 +81,22 @@ func matchList(pathName string, list []string) bool {
 	return false
 }
 
-func findGitDirs(dirName string, includes listFlags, excludes listFlags) []string {
+func findGitDirs(dirName string, includes listFlags, excludes listFlags) ([]string, error) {
 	dirName = filepath.ToSlash(dirName)
 	var foundDirs []string
-	err := filepath.Walk(dirName, func(pathName string, fileInfo os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		// if matchList(pathName, includes) || !matchList(pathName, excludes) {
-		// 	fmt.Println()
-		// }
-		if (matchList(pathName, includes) || !matchList(pathName, excludes)) && fileInfo.IsDir() && fileInfo.Name() == ".git" {
-			foundDirs = append(foundDirs, filepath.Dir(pathName))
-		}
-		return nil
+	err := godirwalk.Walk(dirName, &godirwalk.Options{
+		Unsorted: true,
+		Callback: func(pathName string, dirent *godirwalk.Dirent) error {
+			if (matchList(pathName, includes) || !matchList(pathName, excludes)) && dirent.IsDir() && dirent.Name() == ".git" {
+				foundDirs = append(foundDirs, filepath.Dir(pathName))
+			}
+			return nil
+		},
 	})
 	if err != nil {
-		log.Println(err)
+		return []string{}, err
 	}
-	return foundDirs
+	return foundDirs, nil
 }
 
 func localInit() {
@@ -133,9 +131,7 @@ func getRemote(path string) (string, error) {
 	return "", errors.New("No remotes found")
 }
 
-func main() {
-	localInit()
-	gitDirs := findGitDirs(searchDir, includes, excludes)
+func getAllRemotes(gitDirs []string) map[string]string {
 	pathRemoteMap := make(map[string]string)
 	for _, dir := range gitDirs {
 		remote, err := getRemote(dir)
@@ -143,10 +139,35 @@ func main() {
 			// fmt.Println(err)
 			continue
 		}
-		pathRemoteMap[dir] = remote
+		if remote[len(remote)-4:] == ".git" {
+			pathRemoteMap[dir] = remote
+		}
 	}
-	for key, val := range pathRemoteMap {
-		fmt.Printf("%s: %s\n", key, val)
+	return pathRemoteMap
+}
+
+func mockPlainClone(gitURL string) {
+	tempDir := filepath.Join(os.TempDir(), filepath.Base(gitURL))
+	defer os.RemoveAll(tempDir)
+	_, err := git.PlainClone(tempDir, true, &git.CloneOptions{URL: gitURL})
+	if err != nil {
+		fmt.Println(err)
 	}
-	// fmt.Println(pathRemoteMap)
+	fmt.Println(tempDir)
+}
+
+func handleRemotes(pathRemoteMap map[string]string) {
+	for _, k := range pathRemoteMap {
+		mockPlainClone(k)
+	}
+}
+
+func main() {
+	localInit()
+	gitDirs, err := findGitDirs(searchDir, includes, excludes)
+	if err != nil {
+		fmt.Println(err)
+	}
+	pathRemoteMap := getAllRemotes(gitDirs)
+	handleRemotes(pathRemoteMap)
 }
