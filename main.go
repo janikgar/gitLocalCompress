@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -9,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	git "gopkg.in/src-d/go-git.v4"
 )
 
 // var excludes = []string{
@@ -84,6 +87,9 @@ func findGitDirs(dirName string, includes listFlags, excludes listFlags) []strin
 		if err != nil {
 			return err
 		}
+		// if matchList(pathName, includes) || !matchList(pathName, excludes) {
+		// 	fmt.Println()
+		// }
 		if (matchList(pathName, includes) || !matchList(pathName, excludes)) && fileInfo.IsDir() && fileInfo.Name() == ".git" {
 			foundDirs = append(foundDirs, filepath.Dir(pathName))
 		}
@@ -95,7 +101,7 @@ func findGitDirs(dirName string, includes listFlags, excludes listFlags) []strin
 	return foundDirs
 }
 
-func main() {
+func localInit() {
 	getFlags()
 	flag.Parse()
 	getFlagsFromConfig()
@@ -106,8 +112,41 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
-	gitDirs := findGitDirs(searchDir, includes, excludes)
-	for _, dir := range gitDirs {
-		fmt.Println(dir)
+}
+
+func getRemote(path string) (string, error) {
+	repo, err := git.PlainOpen(path)
+	if err != nil {
+		return "", err
 	}
+	remotes, err := repo.Remotes()
+	if err != nil {
+		return "", err
+	}
+	var remoteURLs []string
+	for _, i := range remotes {
+		remoteURLs = append(remoteURLs, i.Config().URLs...)
+	}
+	if len(remoteURLs) > 0 {
+		return remoteURLs[0], nil
+	}
+	return "", errors.New("No remotes found")
+}
+
+func main() {
+	localInit()
+	gitDirs := findGitDirs(searchDir, includes, excludes)
+	pathRemoteMap := make(map[string]string)
+	for _, dir := range gitDirs {
+		remote, err := getRemote(dir)
+		if err != nil {
+			// fmt.Println(err)
+			continue
+		}
+		pathRemoteMap[dir] = remote
+	}
+	for key, val := range pathRemoteMap {
+		fmt.Printf("%s: %s\n", key, val)
+	}
+	// fmt.Println(pathRemoteMap)
 }
