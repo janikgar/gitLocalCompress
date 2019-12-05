@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/karrick/godirwalk"
 
@@ -89,6 +90,7 @@ func findGitDirs(dirName string, includes listFlags, excludes listFlags) ([]stri
 		Callback: func(pathName string, dirent *godirwalk.Dirent) error {
 			if (matchList(pathName, includes) || !matchList(pathName, excludes)) && dirent.IsDir() && dirent.Name() == ".git" {
 				foundDirs = append(foundDirs, filepath.Dir(pathName))
+				fmt.Printf(".")
 			}
 			return nil
 		},
@@ -96,6 +98,7 @@ func findGitDirs(dirName string, includes listFlags, excludes listFlags) ([]stri
 	if err != nil {
 		return []string{}, err
 	}
+	fmt.Printf("|\n")
 	return foundDirs, nil
 }
 
@@ -141,40 +144,62 @@ func getAllRemotes(gitDirs []string) map[string]string {
 		}
 		if remote[len(remote)-4:] == ".git" {
 			pathRemoteMap[dir] = remote
+			fmt.Printf(".")
 		}
 	}
+	fmt.Printf("|\n")
 	return pathRemoteMap
 }
 
-func mockPlainClone(gitURL string) (string, string, error) {
+func mockPlainClone(inputURL <-chan string, outputURL chan<- string, failedURL chan<- string, errors chan<- error) {
+	// func mockPlainClone(gitURL string) (string, string, error) {
+	gitURL := <-inputURL
 	tempDir := filepath.Join(os.TempDir(), filepath.Base(gitURL))
 	defer os.RemoveAll(tempDir)
 	_, err := git.PlainClone(tempDir, true, &git.CloneOptions{URL: gitURL})
 	if err != nil {
-		return "", gitURL, err
+		outputURL <- ""
+		fmt.Print("1")
+		failedURL <- gitURL
+		errors <- err
+		return
+		// return "", gitURL, err
 	}
-	return gitURL, "", nil
+	fmt.Print("0")
+	outputURL <- gitURL
+	failedURL <- ""
+	errors <- nil
+	return
+	// return gitURL, "", nil
 }
 
 func handleRemotes(pathRemoteMap map[string]string) {
-	var (
-		good   []string
-		bad    []string
-		errors []error
-	)
+	var wg sync.WaitGroup
+	remoteURL := make(chan string, len(pathRemoteMap))
+	clonedURL := make(chan string)
+	failedURL := make(chan string)
+	errors := make(chan error)
 	for _, k := range pathRemoteMap {
-		thisGood, thisBad, thisError := mockPlainClone(k)
-		if thisGood != "" {
-			good = append(good, thisGood)
-		}
-		if thisBad != "" {
-			bad = append(bad, thisBad)
-		}
-		if thisError != nil {
-			errors = append(errors, thisError)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			mockPlainClone(remoteURL, clonedURL, failedURL, errors)
+		}()
+		remoteURL <- k
+	}
+	var allClones []string
+	var allFailed []string
+	var allErrors []error
+	for {
+		allClones = append(allClones, <-clonedURL)
+		allFailed = append(allFailed, <-failedURL)
+		allErrors = append(allErrors, <-errors)
+		<-remoteURL
+		if len(<-remoteURL) == 0 {
+			break
 		}
 	}
-	fmt.Println(good, "", bad, "", errors)
+	wg.Wait()
 }
 
 func main() {
