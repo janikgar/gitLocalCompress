@@ -146,20 +146,35 @@ func getAllRemotes(gitDirs []string) map[string]string {
 	return pathRemoteMap
 }
 
-func mockPlainClone(gitURL string) {
+func mockPlainClone(gitURL string) (string, string, error) {
 	tempDir := filepath.Join(os.TempDir(), filepath.Base(gitURL))
 	defer os.RemoveAll(tempDir)
 	_, err := git.PlainClone(tempDir, true, &git.CloneOptions{URL: gitURL})
 	if err != nil {
-		fmt.Println(err)
+		return "", gitURL, err
 	}
-	fmt.Println(tempDir)
+	return gitURL, "", nil
 }
 
 func handleRemotes(pathRemoteMap map[string]string) {
+	var (
+		good   []string
+		bad    []string
+		errors []error
+	)
 	for _, k := range pathRemoteMap {
-		mockPlainClone(k)
+		thisGood, thisBad, thisError := mockPlainClone(k)
+		if thisGood != "" {
+			good = append(good, thisGood)
+		}
+		if thisBad != "" {
+			bad = append(bad, thisBad)
+		}
+		if thisError != nil {
+			errors = append(errors, thisError)
+		}
 	}
+	fmt.Println(good, "", bad, "", errors)
 }
 
 func main() {
