@@ -13,21 +13,25 @@ jobs:
         go-version: 1.13
       id: go
 
+    - name: Set GOPATH
+      # temporary fix
+      # see https://github.com/actions/setup-go/issues/14
+      run: |
+        echo "##[set-env name=GOPATH;]$(dirname $GITHUB_WORKSPACE)"
+        echo "##[add-path]$(dirname $GITHUB_WORKSPACE)/bin"
+      shell: bash
+
     - name: Check out code into the Go module directory
       uses: actions/checkout@v2-beta
-      with:
-        path: "/home/runner/go/src/repo"
 
     - name: Get dependencies
       run: |
-        mkdir -p /home/runner/go/bin
         go get -v -t -d ./...
         if [ -f Gopkg.toml ]; then
             curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-            /home/runner/go/bin/dep ensure
+            dep ensure
         fi
 
     - name: Build
       run: |
-        cd /home/runner/go/src/repo
         go build -v .
