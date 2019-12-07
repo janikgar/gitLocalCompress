@@ -19,7 +19,6 @@ jobs:
     - name: Get dependencies
       run: |
         echo $GOPATH
-        exit 1
         mkdir -p /home/runner/go/bin
         go get -v -t -d ./...
         if [ -f Gopkg.toml ]; then
