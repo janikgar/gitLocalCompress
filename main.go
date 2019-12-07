@@ -15,15 +15,6 @@ import (
 	git "gopkg.in/src-d/go-git.v4"
 )
 
-// var excludes = []string{
-// 	"/Users/janik/Documents/Programming/go/src",
-// 	"/Users/janik/Documents/Programming/go/pkg/dep",
-// }
-
-// var includes = []string{
-// 	"/Users/janik/Documents/Programming/go/src/github.com/janikgar",
-// }
-
 type listFlags []string
 
 type inputPatterns struct {
@@ -68,12 +59,10 @@ func getFlags() {
 	flag.StringVar(&configFile, "config", "", "filename of JSON file with includes, excludes, and searchdir")
 	flag.Var(&excludes, "exclude", "directory patterns to exclude")
 	flag.Var(&includes, "include", "directory patterns to include (even if excluded in blacklist)")
-	// searchDir = flag.Arg(0)
 }
 
 func matchList(pathName string, list []string) bool {
 	for _, match := range list {
-		// fmt.Printf("path: %s\nmatch: %s\n\n", strings.ReplaceAll(pathName, "\\", "/"), match)
 		if strings.Contains(strings.ReplaceAll(pathName, "\\", "/"), match) {
 			return true
 		}
@@ -138,7 +127,6 @@ func getAllRemotes(gitDirs []string) map[string]string {
 	for _, dir := range gitDirs {
 		remote, err := getRemote(dir)
 		if err != nil {
-			// fmt.Println(err)
 			continue
 		}
 		if remote[len(remote)-4:] == ".git" {
@@ -149,17 +137,6 @@ func getAllRemotes(gitDirs []string) map[string]string {
 	fmt.Printf("|\n")
 	return pathRemoteMap
 }
-
-// func handleRemote(repo string) {
-
-// }
-
-// func handleRemotes(input <-chan string, good, bad chan<- string) {
-// 	repo := <-input
-// 	tempDir := filepath.Join(os.TempDir(), filepath.Base(repo))
-// 	git.PlainClone(tempDir, true, &git.CloneOptions{URL: repo})
-// 	good <- repo
-// }
 
 func main() {
 	localInit()
