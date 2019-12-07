@@ -16,7 +16,7 @@ jobs:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v2-beta
       with:
-        path: "$GOPATH/src/repo"
+        path: "/home/runner/go/src/repo"
 
     - name: Get dependencies
       run: |
