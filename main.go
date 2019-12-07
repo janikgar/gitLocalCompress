@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/karrick/godirwalk"
 
@@ -151,56 +150,16 @@ func getAllRemotes(gitDirs []string) map[string]string {
 	return pathRemoteMap
 }
 
-func mockPlainClone(inputURL <-chan string, outputURL chan<- string, failedURL chan<- string, errors chan<- error) {
-	// func mockPlainClone(gitURL string) (string, string, error) {
-	gitURL := <-inputURL
-	tempDir := filepath.Join(os.TempDir(), filepath.Base(gitURL))
-	defer os.RemoveAll(tempDir)
-	_, err := git.PlainClone(tempDir, true, &git.CloneOptions{URL: gitURL})
-	if err != nil {
-		outputURL <- ""
-		fmt.Print("1")
-		failedURL <- gitURL
-		errors <- err
-		return
-		// return "", gitURL, err
-	}
-	fmt.Print("0")
-	outputURL <- gitURL
-	failedURL <- ""
-	errors <- nil
-	return
-	// return gitURL, "", nil
-}
+// func handleRemote(repo string) {
 
-func handleRemotes(pathRemoteMap map[string]string) {
-	var wg sync.WaitGroup
-	remoteURL := make(chan string, len(pathRemoteMap))
-	clonedURL := make(chan string)
-	failedURL := make(chan string)
-	errors := make(chan error)
-	for _, k := range pathRemoteMap {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			mockPlainClone(remoteURL, clonedURL, failedURL, errors)
-		}()
-		remoteURL <- k
-	}
-	var allClones []string
-	var allFailed []string
-	var allErrors []error
-	for {
-		allClones = append(allClones, <-clonedURL)
-		allFailed = append(allFailed, <-failedURL)
-		allErrors = append(allErrors, <-errors)
-		<-remoteURL
-		if len(<-remoteURL) == 0 {
-			break
-		}
-	}
-	wg.Wait()
-}
+// }
+
+// func handleRemotes(input <-chan string, good, bad chan<- string) {
+// 	repo := <-input
+// 	tempDir := filepath.Join(os.TempDir(), filepath.Base(repo))
+// 	git.PlainClone(tempDir, true, &git.CloneOptions{URL: repo})
+// 	good <- repo
+// }
 
 func main() {
 	localInit()
@@ -208,6 +167,37 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	pathRemoteMap := getAllRemotes(gitDirs)
-	handleRemotes(pathRemoteMap)
+	dirChan := make(chan string)
+	done := make(chan int)
+	var errs []error
+	var successes []string
+	go func(dirs []string) {
+		for _, dir := range dirs {
+			fmt.Print("o")
+			dirChan <- dir
+		}
+		close(dirChan)
+	}(gitDirs)
+	// pathRemoteMap := getAllRemotes(gitDirs)
+
+	go func() {
+		for {
+			select {
+			case repo, ok := <-dirChan:
+				if !ok {
+					done <- 1
+				}
+				tempDir := filepath.Join(os.TempDir(), filepath.Base(repo))
+				_, err := git.PlainClone(tempDir, true, &git.CloneOptions{URL: repo})
+				if err != nil {
+					errs = append(errs, err)
+				}
+				successes = append(successes, repo)
+			}
+		}
+	}()
+	<-done
+	for _, repo := range successes {
+		fmt.Println(repo)
+	}
 }
