@@ -15,17 +15,6 @@ jobs:
 
     - name: Check out code into the Go module directory
       uses: actions/checkout@v2-beta
-      with:
-        path: $GITHUB_WORKSPACE/src/repo
-
-    - name: Set GOPATH
-      # temporary fix
-      # see https://github.com/actions/setup-go/issues/14
-      run: |
-        echo "##[set-env name=GOPATH;]$(dirname $GITHUB_WORKSPACE)"
-        echo "##[add-path]$(dirname $GITHUB_WORKSPACE)/bin"
-        mkdir -p $(dirname $GITHUB_WORKSPACE)/bin
-      shell: bash
 
     - name: Get dependencies
       run: |
@@ -37,5 +26,4 @@ jobs:
 
     - name: Build
       run: |
-        cd $(dirname $GITHUB_WORKSPACE)/src/repo
         go build -v .
