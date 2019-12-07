@@ -29,4 +29,6 @@ jobs:
         fi
 
     - name: Build
-      run: go build -v "$GOPATH/src/repo"
+      run: |
+        cd "$GOPATH/src/repo"
+        go build -v .
