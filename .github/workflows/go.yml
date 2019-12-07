@@ -37,5 +37,5 @@ jobs:
 
     - name: Build
       run: |
-        cd $GITHUB_WORKSPACE/src/repo
+        cd $(dirname $GITHUB_WORKSPACE)/src/repo
         go build -v .
