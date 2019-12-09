@@ -78,7 +78,6 @@ func findGitDirs(dirName string, includes listFlags, excludes listFlags) ([]stri
 		Callback: func(pathName string, dirent *godirwalk.Dirent) error {
 			if (matchList(pathName, includes) || !matchList(pathName, excludes)) && dirent.IsDir() && dirent.Name() == ".git" {
 				foundDirs = append(foundDirs, filepath.Dir(pathName))
-				fmt.Printf(".")
 			}
 			return nil
 		},
@@ -86,7 +85,6 @@ func findGitDirs(dirName string, includes listFlags, excludes listFlags) ([]stri
 	if err != nil {
 		return []string{}, err
 	}
-	fmt.Printf("|\n")
 	return foundDirs, nil
 }
 
@@ -131,52 +129,120 @@ func getAllRemotes(gitDirs []string) map[string]string {
 		}
 		if remote[len(remote)-4:] == ".git" {
 			pathRemoteMap[dir] = remote
-			fmt.Printf(".")
 		}
 	}
-	fmt.Printf("|\n")
 	return pathRemoteMap
 }
 
 func queueCloneDirs(dirs []string, dirChan chan string) {
+	fmt.Println("started queueing")
 	for _, dir := range dirs {
-		fmt.Print("o")
 		dirChan <- dir
 	}
 	close(dirChan)
 }
 
+// func pullRemoteRepos(dirChan chan string, done chan int, errs []error, successes []string) {
+// 	fmt.Println("started pull")
+// 	for {
+// 		select {
+// 		case repo, ok := <-dirChan:
+// 			if !ok {
+// 				done <- 1
+// 			}
+// 		}
+// 	}
+// }
+
+func coordinate(dirChan chan string, done chan int) {
+	// var (
+	// 	errs      []error
+	// 	successes []string
+	// )
+	// errs := make(chan error)
+	// successes := make(chan string)
+	responses := make(chan cloneResponse)
+	for {
+		select {
+		case repo, ok := <-dirChan:
+			if !ok {
+				done <- 1
+			}
+			go pullRepos(repo, responses)
+		case response := <-responses:
+			if response.success {
+				fmt.Println(response.repo)
+			} else {
+				fmt.Println(response.err)
+			}
+		}
+	}
+}
+
+func pullRepos(repo string, responses chan cloneResponse) {
+	tempDir := filepath.Join(os.TempDir(), filepath.Base(repo))
+	_, err := git.PlainClone(tempDir, true, &git.CloneOptions{URL: repo})
+	if err != nil && err.Error() != "repository already exists" {
+		responses <- cloneResponse{
+			repo:    repo,
+			success: false,
+			err:     err,
+		}
+	}
+	responses <- cloneResponse{
+		repo:    repo,
+		success: true,
+		err:     nil,
+	}
+	// successes <- repo
+	// if err != nil {
+	// 	errs <- err
+	// 	// errs = append(errs, err)
+	// }
+	// fmt.Printf("x")
+	// successes = append(successes, repo)
+}
+
+type cloneResponse struct {
+	repo    string
+	success bool
+	err     error
+}
+
 func main() {
 	localInit()
+
 	gitDirs, err := findGitDirs(searchDir, includes, excludes)
 	if err != nil {
 		fmt.Println(err)
 	}
 	dirChan := make(chan string)
 	done := make(chan int)
-	var errs []error
-	var successes []string
+	// errs := make(chan error)
+	// successes := make(chan string)
+	// var errs []error
+	// var successes []string
 
 	go queueCloneDirs(gitDirs, dirChan)
-
-	go func() {
-		for {
-			select {
-			case repo, ok := <-dirChan:
-				if !ok {
-					done <- 1
-				}
-				tempDir := filepath.Join(os.TempDir(), filepath.Base(repo))
-				_, err := git.PlainClone(tempDir, true, &git.CloneOptions{URL: repo})
-				if err != nil {
-					errs = append(errs, err)
-				}
-				successes = append(successes, repo)
-			}
-		}
-	}()
+	go coordinate(dirChan, done)
+	// go pullRepos(dirChan, done, errs, successes)
 	<-done
-	for _, repo := range successes {
-		fmt.Println(repo)
-	}
+
+	// go func() {
+	// 	for {
+	// 		select {
+	// 		case repo, ok := <-dirChan:
+	// 			if !ok {
+	// 				done <- 1
+	// 			}
+	// 			tempDir := filepath.Join(os.TempDir(), filepath.Base(repo))
+	// 			_, err := git.PlainClone(tempDir, true, &git.CloneOptions{URL: repo})
+	// 			if err != nil {
+	// 				errs = append(errs, err)
+	// 			}
+	// 			successes = append(successes, repo)
+	// 		}
+	// 	}
+	// }()
+	// <-done
 }
