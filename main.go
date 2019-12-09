@@ -138,6 +138,14 @@ func getAllRemotes(gitDirs []string) map[string]string {
 	return pathRemoteMap
 }
 
+func queueCloneDirs(dirs []string, dirChan chan string) {
+	for _, dir := range dirs {
+		fmt.Print("o")
+		dirChan <- dir
+	}
+	close(dirChan)
+}
+
 func main() {
 	localInit()
 	gitDirs, err := findGitDirs(searchDir, includes, excludes)
@@ -148,14 +156,8 @@ func main() {
 	done := make(chan int)
 	var errs []error
 	var successes []string
-	go func(dirs []string) {
-		for _, dir := range dirs {
-			fmt.Print("o")
-			dirChan <- dir
-		}
-		close(dirChan)
-	}(gitDirs)
-	// pathRemoteMap := getAllRemotes(gitDirs)
+
+	go queueCloneDirs(gitDirs, dirChan)
 
 	go func() {
 		for {
