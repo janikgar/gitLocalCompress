@@ -142,25 +142,7 @@ func queueCloneDirs(dirs []string, dirChan chan string) {
 	close(dirChan)
 }
 
-// func pullRemoteRepos(dirChan chan string, done chan int, errs []error, successes []string) {
-// 	fmt.Println("started pull")
-// 	for {
-// 		select {
-// 		case repo, ok := <-dirChan:
-// 			if !ok {
-// 				done <- 1
-// 			}
-// 		}
-// 	}
-// }
-
 func coordinate(dirChan chan string, done chan int) {
-	// var (
-	// 	errs      []error
-	// 	successes []string
-	// )
-	// errs := make(chan error)
-	// successes := make(chan string)
 	responses := make(chan cloneResponse)
 	for {
 		select {
@@ -194,13 +176,6 @@ func pullRepos(repo string, responses chan cloneResponse) {
 		success: true,
 		err:     nil,
 	}
-	// successes <- repo
-	// if err != nil {
-	// 	errs <- err
-	// 	// errs = append(errs, err)
-	// }
-	// fmt.Printf("x")
-	// successes = append(successes, repo)
 }
 
 type cloneResponse struct {
@@ -218,31 +193,8 @@ func main() {
 	}
 	dirChan := make(chan string)
 	done := make(chan int)
-	// errs := make(chan error)
-	// successes := make(chan string)
-	// var errs []error
-	// var successes []string
 
 	go queueCloneDirs(gitDirs, dirChan)
 	go coordinate(dirChan, done)
-	// go pullRepos(dirChan, done, errs, successes)
 	<-done
-
-	// go func() {
-	// 	for {
-	// 		select {
-	// 		case repo, ok := <-dirChan:
-	// 			if !ok {
-	// 				done <- 1
-	// 			}
-	// 			tempDir := filepath.Join(os.TempDir(), filepath.Base(repo))
-	// 			_, err := git.PlainClone(tempDir, true, &git.CloneOptions{URL: repo})
-	// 			if err != nil {
-	// 				errs = append(errs, err)
-	// 			}
-	// 			successes = append(successes, repo)
-	// 		}
-	// 	}
-	// }()
-	// <-done
 }
