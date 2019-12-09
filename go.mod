@@ -1,6 +1,7 @@
 module github.com/janikgar/gitLocalCompress
 
 require (
+	github.com/briandowns/spinner v1.8.0
 	github.com/karrick/godirwalk v1.13.0
 	gopkg.in/src-d/go-git.v4 v4.13.1
 )

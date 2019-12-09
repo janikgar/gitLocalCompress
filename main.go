@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/briandowns/spinner"
 	"github.com/karrick/godirwalk"
 
 	git "gopkg.in/src-d/go-git.v4"
@@ -71,6 +73,10 @@ func matchList(pathName string, list []string) bool {
 }
 
 func findGitDirs(dirName string, includes listFlags, excludes listFlags) ([]string, error) {
+	s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
+	s.Prefix = "Searching given directories: "
+	s.Color("green", "bold")
+	s.Start()
 	dirName = filepath.ToSlash(dirName)
 	var foundDirs []string
 	err := godirwalk.Walk(dirName, &godirwalk.Options{
@@ -82,6 +88,7 @@ func findGitDirs(dirName string, includes listFlags, excludes listFlags) ([]stri
 			return nil
 		},
 	})
+	s.Stop()
 	if err != nil {
 		return []string{}, err
 	}
@@ -135,7 +142,6 @@ func getAllRemotes(gitDirs []string) map[string]string {
 }
 
 func queueCloneDirs(dirs []string, dirChan chan string) {
-	fmt.Println("started queueing")
 	for _, dir := range dirs {
 		dirChan <- dir
 	}
@@ -185,8 +191,6 @@ type cloneResponse struct {
 }
 
 func main() {
-	// localInit()
-
 	gitDirs, err := findGitDirs(searchDir, includes, excludes)
 	if err != nil {
 		fmt.Println(err)
