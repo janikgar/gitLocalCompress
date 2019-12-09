@@ -88,7 +88,7 @@ func findGitDirs(dirName string, includes listFlags, excludes listFlags) ([]stri
 	return foundDirs, nil
 }
 
-func localInit() {
+func init() {
 	getFlags()
 	flag.Parse()
 	getFlagsFromConfig()
@@ -185,7 +185,7 @@ type cloneResponse struct {
 }
 
 func main() {
-	localInit()
+	// localInit()
 
 	gitDirs, err := findGitDirs(searchDir, includes, excludes)
 	if err != nil {
