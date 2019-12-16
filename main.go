@@ -1,10 +1,12 @@
 package main
 
 import (
+	"archive/tar"
+	"bytes"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -74,7 +76,7 @@ func matchList(pathName string, list []string) bool {
 
 func findGitDirs(dirName string, includes listFlags, excludes listFlags) ([]string, error) {
 	s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
-	s.Prefix = "Searching given directories: "
+	s.Prefix = "  Searching given directories: "
 	s.Color("green", "bold")
 	s.Start()
 	dirName = filepath.ToSlash(dirName)
@@ -108,38 +110,38 @@ func init() {
 	}
 }
 
-func getRemote(path string) (string, error) {
-	repo, err := git.PlainOpen(path)
-	if err != nil {
-		return "", err
-	}
-	remotes, err := repo.Remotes()
-	if err != nil {
-		return "", err
-	}
-	var remoteURLs []string
-	for _, i := range remotes {
-		remoteURLs = append(remoteURLs, i.Config().URLs...)
-	}
-	if len(remoteURLs) > 0 {
-		return remoteURLs[0], nil
-	}
-	return "", errors.New("No remotes found")
-}
+// func getRemote(path string) (string, error) {
+// 	repo, err := git.PlainOpen(path)
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	remotes, err := repo.Remotes()
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	var remoteURLs []string
+// 	for _, i := range remotes {
+// 		remoteURLs = append(remoteURLs, i.Config().URLs...)
+// 	}
+// 	if len(remoteURLs) > 0 {
+// 		return remoteURLs[0], nil
+// 	}
+// 	return "", errors.New("No remotes found")
+// }
 
-func getAllRemotes(gitDirs []string) map[string]string {
-	pathRemoteMap := make(map[string]string)
-	for _, dir := range gitDirs {
-		remote, err := getRemote(dir)
-		if err != nil {
-			continue
-		}
-		if remote[len(remote)-4:] == ".git" {
-			pathRemoteMap[dir] = remote
-		}
-	}
-	return pathRemoteMap
-}
+// func getAllRemotes(gitDirs []string) map[string]string {
+// 	pathRemoteMap := make(map[string]string)
+// 	for _, dir := range gitDirs {
+// 		remote, err := getRemote(dir)
+// 		if err != nil {
+// 			continue
+// 		}
+// 		if remote[len(remote)-4:] == ".git" {
+// 			pathRemoteMap[dir] = remote
+// 		}
+// 	}
+// 	return pathRemoteMap
+// }
 
 func queueCloneDirs(dirs []string, dirChan chan string) {
 	for _, dir := range dirs {
@@ -148,37 +150,116 @@ func queueCloneDirs(dirs []string, dirChan chan string) {
 	close(dirChan)
 }
 
-func coordinate(dirChan chan string, done chan int) {
-	responses := make(chan cloneResponse)
+func tarGz(tempDir string) {
+	// var ioWriter io.Writer
+	tarBytes := new(bytes.Buffer)
+
+	// gzWriter := gzip.NewWriter(ioWriter)
+	// defer gzWriter.Close()
+
+	tarWriter := tar.NewWriter(tarBytes)
+	defer tarWriter.Close()
+
+	err := godirwalk.Walk(tempDir, &godirwalk.Options{
+		Unsorted: true,
+		Callback: func(pathName string, dirent *godirwalk.Dirent) error {
+			if !dirent.IsRegular() {
+				return nil
+			}
+			stat, err := os.Stat(pathName)
+			if err != nil {
+				return err
+			}
+			header, err := tar.FileInfoHeader(stat, stat.Name())
+			if err != nil {
+				return err
+			}
+			if filepath.IsAbs(pathName) {
+				header.Name = strings.TrimPrefix(strings.Replace(pathName, tempDir, "", -1), string(filepath.Separator))
+			}
+			if stat.IsDir() {
+				header.Size = 0
+			}
+			// fmt.Printf("Name: %s\nSize: %d\nMode: %s\nTime: %s\nDir?: %t\n", header.Name, header.Size, stat.Mode().String(), stat.ModTime(), stat.IsDir())
+			// fmt.Printf("%s\n%d\n%s\n%s\n%t\n", header.Name, header.Size, header.FileInfo().Mode().String(), header.ModTime.Format("20060102"), header.FileInfo().IsDir())
+			if err := tarWriter.WriteHeader(header); err != nil {
+				return err
+			}
+			if stat.IsDir() {
+				return nil
+			}
+			fi, err := os.Open(pathName)
+			if err != nil {
+				return err
+			}
+			defer fi.Close()
+			if _, err := io.Copy(tarWriter, fi); err != nil {
+				return err
+			}
+			if err = tarWriter.Flush(); err != nil {
+				return err
+			}
+			// if err = gzWriter.Flush(); err != nil {
+			// 	return err
+			// }
+			// gzWriter.Flush()
+			return nil
+		},
+		ErrorCallback: func(pathname string, err error) godirwalk.ErrorAction {
+			fmt.Printf("ERROR: %s: %s\n", pathname, err.Error())
+			return godirwalk.SkipNode
+		},
+	})
+	if err != nil {
+		fmt.Println(err)
+	}
+	tempFileName := fmt.Sprintf("%s.tar", tempDir)
+	fmt.Printf("Writing file to %s...\n", tempFileName)
+	time.Sleep(time.Second)
+	tempFile, err := os.Create(tempFileName)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if _, err = io.Copy(tempFile, tarBytes); err != nil {
+		fmt.Println(err)
+	}
+}
+
+func coordinate(gitDirs []string, dirChan chan string, cloneDone chan int, tarGzDone chan int) {
+	responses := make(chan cloneResponse, len(gitDirs))
 	for {
 		select {
 		case repo, ok := <-dirChan:
 			if !ok {
-				done <- 1
+				cloneDone <- 1
 			}
-			go pullRepos(repo, responses)
-		case response := <-responses:
+			go cloneRepos(repo, responses)
+		case response, ok := <-responses:
+			if !ok {
+				tarGzDone <- 1
+			}
 			if response.success {
-				fmt.Println(response.repo)
-			} else {
-				fmt.Println(response.err)
+				go tarGz(response.tempDir)
 			}
 		}
 	}
 }
 
-func pullRepos(repo string, responses chan cloneResponse) {
-	tempDir := filepath.Join(os.TempDir(), filepath.Base(repo))
+func cloneRepos(repo string, responses chan<- cloneResponse) {
+	tempDir := filepath.Join(os.TempDir(), fmt.Sprintf("%s.git", filepath.Base(repo)))
 	_, err := git.PlainClone(tempDir, true, &git.CloneOptions{URL: repo})
 	if err != nil && err.Error() != "repository already exists" {
 		responses <- cloneResponse{
 			repo:    repo,
+			tempDir: tempDir,
 			success: false,
 			err:     err,
 		}
 	}
+	fmt.Printf("Cloning %s...\n", filepath.Base(repo))
 	responses <- cloneResponse{
 		repo:    repo,
+		tempDir: tempDir,
 		success: true,
 		err:     nil,
 	}
@@ -186,6 +267,7 @@ func pullRepos(repo string, responses chan cloneResponse) {
 
 type cloneResponse struct {
 	repo    string
+	tempDir string
 	success bool
 	err     error
 }
@@ -196,9 +278,19 @@ func main() {
 		fmt.Println(err)
 	}
 	dirChan := make(chan string)
-	done := make(chan int)
+	cloneDone := make(chan int)
+	tarGzDone := make(chan int)
 
+	// go fmt.Printf("Directories: %d\n", cap(dirChan))
 	go queueCloneDirs(gitDirs, dirChan)
-	go coordinate(dirChan, done)
-	<-done
+
+	// for _, dir := range gitDirs {
+	// 	dirChan <- dir
+	// }
+	// defer close(dirChan)
+
+	go coordinate(gitDirs, dirChan, cloneDone, tarGzDone)
+	<-dirChan
+	<-tarGzDone
+	<-cloneDone
 }
