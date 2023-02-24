@@ -16,7 +16,7 @@ import (
 	"github.com/briandowns/spinner"
 	"github.com/karrick/godirwalk"
 
-	git "gopkg.in/src-d/go-git.v4"
+	git "github.com/go-git/go-git/v5"
 )
 
 type listFlags []string
